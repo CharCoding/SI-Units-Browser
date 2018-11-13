@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Units</title>
+  <style type="text/css">
+  body {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    color: #fff;
+    font-family: sans-serif;
+    overflow-y: hidden;
+    font-size: 20px;
+  }
+  sup { font-size: 3vmin; }
+  body > div {
+    position: relative;
+    width: 100%;
+    height: 20vh;
+    margin: 0;
+    display: flex;
+  }
+  a:link, a:visited {
+    color: #fff;
+  }
+  #sliders {
+    background-color: #012;
+    justify-content: space-around;
+  } /*Underrated color scheme*/
+  #sliders > div {
+    width: 10vw;
+    max-width: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    text-align: center;
+  }
+  #sliders span:last-child { font-size: 6vmin; }
+  body > div::before {
+    font-size: 10vh;
+    font-family: Consolas, monospace;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    line-height: 75%;
+    letter-spacing: -.5vh;
+    color: #0004 !important;
+  }
+  #units {
+    background-color: #123;
+    font-size: 6vmin;
+    justify-content: center;
+    padding-top: 5vh;
+    box-sizing: border-box;
+  }
+  #units::before { content: "Units"; }
+  #units sub {
+    align-self: center;
+    margin-top: -4vh;
+  }
+  #constants {
+    background-color: #234;
+    font-size: 5vh;
+    justify-content: center;
+    padding-top: 5vh;
+    box-sizing: border-box;
+  }
+  #constants::before { content: "Constants"; }
+  #equations {
+    background-color: #345;
+    z-index: 4;
+    font-size: 5vh;
+    justify-content: center;
+    align-items: center;
+  }
+  #equations::before { content: "Equations"; }
+  #definitions {
+    background-color: #456;
+    font-size: 5vh;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  #definitions::before { content: "Definitions"; }
+  .fraction {
+    display: inline-flex;
+    flex-direction: column;
+    text-align: center;
+    padding: 0 20px;
+  }
+  .numerator {
+    border-bottom: 1px solid white;
+  }
+  .dark { color: #567; }
+  </style>
+</head>
+<body>
+  <div id="sliders"></div>
+  <div id="units">SI Base &amp; Derived Units Browser</div>
+  <div id="constants"><span style="flex-grow: 1; text-align: center;">By <a href="https://github.com/CharCoding/">CharCoding</a>, 2018</span></div>
+  <div id="equations"><span style="flex-grow: 1; text-align: center;">Use mouse wheel or left/right click on the base units to build your derived unit.</span></div>
+  <div id="definitions"></div>
+  <script type="text/javascript">'use strict';
+  const BASE = { kg: 0, m: 0, mol: 0, s: 0, K: 0, A: 0, cd: 0 },
+    UNITS = {},
+    CONSTANTS = [],
+    EQUATIONS = [],
+    DEFINITIONS = [],
+    WIKIPEDIA = 'https://en.wikipedia.org/wiki/',
+    unitsToKey = units => {
+      let str = '';
+      for(const unit in units) {
+        if(units[unit] == 0) continue;
+        str += unit + units[unit];
+      }
+      return str;
+    },
+    unitsToHTML = units => {
+      let str = '';
+      for(const unit in units) {
+        if(units[unit] == 0) continue;
+        str += unit;
+        if(units[unit] != 1) str += `<sup>${units[unit]}</sup>`;
+        str += '⋅';
+      }
+      return str.slice(0, -1);
+    },
+    unitsToEquation = units => {
+      let inverse = false,
+        numerator = '',
+        denominator = '';
+      for(const unit in units) {
+        const exp = units[unit];
+        if(exp == 0) continue;
+        if(exp > 0) {
+          numerator += unit;
+          if(exp > 1) numerator += `<sup>${exp}</sup>`;
+        } else if(exp < 0) {
+          inverse = true;
+          denominator += unit;
+          if(exp < -1) denominator += `<sup>${-exp}</sup>`;
+        }
+      }
+      if(inverse) {
+        return `<div class="fraction"><span class="numerator">${numerator}</span>\
+        <span>${denominator}</span></div>`;
+      } else return numerator;
+    }
+  class Slider {
+    constructor(unit, measure, symbol, min, max) {
+      const div = document.createElement('div'),
+        a = document.createElement('a'),
+        span = document.createElement('span'),
+        text = document.createElement('span'),
+        sup = document.createElement('sup');
+      sup.textContent = this.exp = 0;
+      span.textContent = symbol;
+      span.className = 'dark';
+      span.appendChild(sup);
+      a.textContent = unit;
+      a.href = WIKIPEDIA + unit;
+      div.appendChild(a);
+      text.textContent = measure;
+      div.appendChild(text);
+      div.appendChild(span);
+      sliders.appendChild(div);
+      div.addEventListener('wheel', e => {
+        if(e.deltaY > 0 && this.exp > min)
+          sup.textContent = --this.exp;
+        else if(e.deltaY < 0 && this.exp < max)
+          sup.textContent = ++this.exp;
+        BASE[symbol] = this.exp;
+        update(span, this.exp);
+      });
+      span.addEventListener('click', e => {
+        if(this.exp < max)
+          sup.textContent = ++this.exp;
+        BASE[symbol] = this.exp;
+        update(span, this.exp);
+      });
+      span.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        if(this.exp > min)
+          sup.textContent = --this.exp;
+        BASE[symbol] = this.exp;
+        update(span, this.exp);
+      });
+    }
+  }
+  class Unit {
+    constructor(measure, symbol, unit, unitSymbol, definition, baseUnits, otherUnits = []) {
+      this.measure = measure;
+      this.symbol = symbol;
+      this.unit = unit;
+      this.unitSymbol = unitSymbol;
+      this.definition = definition;
+      this.baseUnits = baseUnits;
+      this.otherUnits = otherUnits;
+      UNITS[unitsToKey(baseUnits)] = this;
+    }
+    has(unit) {
+      if(typeof unit == 'object')
+        unit = unit.name;
+      if(this.baseUnits[unit]) return true;
+      if(this.otherUnits[unit]) return true;
+      return false;
+    }
+    toString() {
+      let str = `${this.measure} ${this.symbol}: ${this.unit} (${this.unitSymbol}`;
+      if(BASE[this.unitSymbol] === undefined) {
+        if(this.unitSymbol.length) str += ', ';
+        str += unitsToHTML(this.baseUnits);
+        for(const unitSet of this.otherUnits)
+          str += ', ' + unitsToHTML(unitSet);
+      }
+      return str + ')';
+    }
+  }
+  class Constant {
+    constructor(symbol, units, value, definition) {
+      this.symbol = symbol;
+      this.units = units;
+      this.value = value;
+      this.definition = definition;
+      CONSTANTS[unitsToKey(units)] = this;
+    }
+    toString() {
+      return `<div class="fraction"><span>${this.symbol} = ${this.value} ${unitsToHTML(this.units)}</span>\
+      <span>${this.definition}</span></div>`;
+    }
+  }
+  class Equation {
+    constructor(eqns, definition) {
+      this.eqns = eqns;
+      this.definition = definition;
+      EQUATIONS.push(this);
+    }
+    has(unit) {
+      if(typeof unit == 'object')
+        unit = unit.symbol;
+      for(const eqn of this.eqns)
+        if(eqn[unit] !== undefined) return true;
+    }
+    rearrange(unit) {
+
+    }
+    toString() {
+      //return unitsToEquation(this.lhs) + ' = ' + unitsToEquation(this.rhs);
+      return this.eqns.map(unitsToEquation).join(' = ');
+    }
+  }
+  new Slider('metre', 'length, L', 'm', -3, 3);
+  new Slider('kilogram', 'mass, M', 'kg', -2, 2);
+  new Slider('second', 'time, T', 's', -3, 4);
+  new Slider('ampere', 'electric current, I', 'A', -2, 2);
+  new Slider('kelvin', 'thermodynamic temperature, Θ', 'K', -1, 1);
+  new Slider('mole', 'amount of substance, N', 'mol', -1, 1);
+  new Slider('candela', 'luminous intensity, J', 'cd', -1, 1);
+  new Unit('Length', 'l', 'metre', 'm', 'Any quantity with dimension distance', {m:1});
+  new Unit('Mass', 'M', 'kilogram', 'kg', 'An object\'s resistance to acceleration when a net force is applied', {kg:1});
+  new Unit('Time', 'T', 'second', 's', 'What a clock reads (this is literally from wikipedia)', {s:1});
+  new Unit('Electric current', 'I', 'ampere', 'A', 'A flow of electric charge', {A:1});
+  new Unit('Temperature', 'T', 'kelvin', 'K', 'A physical quantity expressing hot and cold.', {K:1});
+  new Unit('Amount of substance', 'n', 'mole', 'mol', 'A standard-defined quantity that measures the size of an ensemble of particles (e.g. atoms, molecules, electrons, etc.)', {mol:1});
+  new Unit('Luminous intensity', 'l<sub>v</sub>', 'candela', 'cd', 'The luminous power per unit solid angle emitted by a point light source in a particular direction', {cd:1});
+  new Unit('Velocity', '', '', 'v', 'The rate of change of an object\'s position with respect to a frame of reference', {m:1,s:-1});
+  new Unit('Acceleration', '', '', 'a', 'The rate of change of velocity of an object with respect to time', {m:1,s:-2});
+  new Unit('Jerk', '', '', 'j', 'The rate of change of acceleration', {m:1,s:-3});
+  new Unit('Force', 'F', 'newton', 'N', 'Any interaction that, when unopposed, will change the motion of an object', {kg:1,m:1,s:-2});
+  new Unit('Frequency', 'f', 'hertz', 'Hz', 'The number of occurrences of a repeating event per unit of time', {s:-1});
+  new Unit('Pressure', '𝑃', 'pascal', 'Pa', 'The force applied perpendicular to the surface of an object per unit area over which that force is distributed', {kg:1,m:-1,s:-2},[{N:1,m:-2}]);
+  new Unit('Energy E,', 'Work W', 'joule', 'J', 'The quantitative property that must be transferred to an object in order to perform work on, or to heat, the object', {kg:1,m:2,s:-2});
+  new Unit('Power', 'P', 'watt', 'W', 'The rate of doing work or transferring heat', {kg:1,m:2,s:-3}, [{J:1,s:-1}, {N:1,m:1,s:-1}, {V:1,I:1}]);
+  new Unit('Charge', 'Q', 'Coulumb', 'C', 'The physical property of matter that causes it to experience a force when placed in an electromagnetic field', {s:1,A:1});
+  new Unit('Voltage', 'V', 'volt', 'V', 'The difference in electric potential between two points', {kg:1,m:2,s:-3,A:-1},[{W:1,A:-1},{J:1,C:-1}]);
+  new Unit('Capacitance', 'C', 'farad', 'F', 'The ratio of the change in an electric charge in a system to the corresponding change in its electric potential', {kg:-1,m:-2,s:4,A:2}, [{C:1,V:-1},{s:1,Ω:-1}]);
+  new Unit('Resistance', 'R', 'ohm', 'Ω', 'A measure of an object\'s opposition to the flow of electric current', {kg:1,m:2,s:-3,A:-2}, [{V:1,A:-1}]);
+  new Unit('Magnetic flux', 'Φ', 'weber', 'Wb', 'The number of magnetic field lines passing through a surface (such as a loop of wire)*', {kg:1,m:2,s:-2,A:-1}, [{J:1,A:-1}, {T:1,m:-2}]);
+  new Unit('Magnetic flux density', 'B', 'tesla', 'T', 'The amount of magnetic flux through a unit area taken perpendicular to the direction of the magnetic flux', {kg:1,s:-2,A:-1}, [{V:1,s:1,A:-1}, {Ω:1,s:1}, {Wb:1,A:-1}]);
+  new Unit('Inductance', 'L', 'henry', 'H', 'The property of an electrical conductor by which a change in electric current through it induces an electromotive force (voltage) in the conductor', {kg:1,m:2,s:-2,A:-2}, [{Wb:1, A:-1}]);
+  new Unit('Area', '𝐴', '', '', '', {m:2});
+  new Unit('Volume', '𝑉', '', '', '', {m:3}); // hack: using unicode italic V to differenciate between Volume and Voltage.
+  new Unit('Density', 'ρ', '', 'mV<sup>-1</sup>', '', {kg:1,m:-3})
+  new Unit('Momentum', 'p', '', 'm⋅v', 'The product of the mass and velocity of an object', {kg:1,m:1,s:-1});
+  new Constant('c', {m:1,s:-1}, 299792458, 'Speed of light in vacuum')
+  new Constant('g', {m:1,s:-2}, 9.81, 'Gravity of Earth');
+  new Constant('G', {kg:-1,m:3,s:-2}, 6.6740831e-11, 'Gravitational Constant');
+  new Constant('N<sub>A</sub>', {mol:-1}, 6.02214085774e23, 'Avogadro Constant');
+  new Equation([{P:1},{V:1,I:1},{W:1,t:-1}], 'Power equals voltage x current');
+  new Equation([{V:1},{I:1,R:1}], 'Voltage equals current x resistance');
+  new Equation([{C:1},{Q:1,V:-1}], 'Capacitance equals charge over voltage');
+  new Equation([{𝑃:1,𝑉:1},{n:1,R:1,T:1}], 'Ideal Gas Law');
+  //new Unit('illuminance', 'E<sub>v</sub>', 'lux', 'lx', 'The total luminous flux incident on a surface per unit area', {cd:1,sr:1,m:-2}, [{lm:1,m:-2}]); // won't work due to sr (unitless)
+  function update(symbol, exp) {
+    units.textContent = constants.textContent = equations.textContent = definitions.textContent = '';
+    if(exp == 0) symbol.className = 'dark';
+    else symbol.className = '';
+    const key = unitsToKey(BASE);
+    let unit = UNITS[key], constant = CONSTANTS[key];
+    if(unit) {
+      units.innerHTML = unit;
+      definitions.innerHTML = unit.definition;
+      // somehow fill in equations
+      let eqns = EQUATIONS.filter(eqn => eqn.has(unit.symbol));
+      if(eqns.length) equations.innerHTML = eqns.join(', ');
+    }
+    if(constant) constants.innerHTML = constant;
+  }
+  </script>
+</body>
+</html>
